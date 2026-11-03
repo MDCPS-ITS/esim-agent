@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, onTestFinished, test } from "vitest";
@@ -163,6 +163,23 @@ test("a committed dependency dir is not linked, and worker edits inside it land"
   });
   expect(text).toContain("\n  M vendor/lib/a.txt +1 -1\n");
   expect(readFileSync(join(repo.dir, "vendor", "lib", "a.txt"), "utf8")).toBe("v2\n");
+});
+
+test("an untracked symlink to a directory (a built .app's Frameworks) is carried over as a symlink", async () => {
+  const { text, worktree } = await scenario({
+    prepare: (dir) => {
+      mkdirSync(join(dir, "App.app", "PIL", "__dot__dylibs"), { recursive: true });
+      writeFileSync(join(dir, "App.app", "PIL", "__dot__dylibs", "lib.dylib"), "bin\n");
+      symlinkSync("__dot__dylibs", join(dir, "App.app", "PIL", ".dylibs"));
+    },
+    actions: (dir) => [
+      { edit: "src/out.txt", content: "out\n" },
+      { tool: "write" },
+      { finish: REPORT },
+    ],
+  });
+  expect(text).toMatch(/^OK /);
+  expect(worktree).toBeTruthy();
 });
 
 test("an untracked nested repository is left out of the worktree and does not break the job", async () => {

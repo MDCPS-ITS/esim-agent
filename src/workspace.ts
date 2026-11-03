@@ -1,6 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { copyFileSync, cpSync, existsSync, linkSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, linkSync, lstatSync, mkdirSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { isAlive, link, normalisePath, removeLink } from "./platform.js";
 
@@ -54,7 +54,11 @@ export function createWorktree(root: string, job: string, linkDirs: string[]): W
     // (git would refuse to index it, or record it as a gitlink that would then land)
     for (const file of untracked.filter((f) => !f.endsWith("/"))) {
       mkdirSync(dirname(join(path, file)), { recursive: true });
-      cpSync(join(root, file), join(path, file), { verbatimSymlinks: true });
+      const source = join(root, file);
+      // git lists a symlink as one file; cpSync refuses one that points at a directory ("Recursive option not
+      // enabled"), as in a built .app bundle's Frameworks (PIL/.dylibs -> __dot__dylibs), so it is recreated as is
+      if (lstatSync(source).isSymbolicLink()) symlinkSync(readlinkSync(source), join(path, file));
+      else cpSync(source, join(path, file), { verbatimSymlinks: true });
     }
 
     for (const dir of linkDirs) {
