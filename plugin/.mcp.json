@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "esim-agent": {
+      "command": "npx",
+      "args": ["-y", "esim-agent@1.3.2"]
+    }
+  }
+}

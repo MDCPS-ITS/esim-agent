@@ -1,0 +1,12 @@
+{
+  "name": "esim-agent",
+  "description": "ESIM Agent: your frontier model plans and reviews while a cheaper model implements, over MCP.",
+  "owner": { "name": "Fernando Mata" },
+  "plugins": [
+    {
+      "name": "esim-agent",
+      "source": "./plugin",
+      "description": "ESIM Agent's MCP server, plan-writing skill, and /esim-agent:status, /esim-agent:allow, /esim-agent:clean, and the opt-in edit guard (/esim-agent:hook)."
+    }
+  ]
+}
