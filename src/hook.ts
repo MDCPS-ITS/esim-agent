@@ -363,6 +363,8 @@ function readOnly(command: string): boolean {
   // whole tokens only: `2>&1`, `>&-`, `> /dev/null`, never `>/dev/null.txt` or `>&1x`
   const bare = command.replace(/\d*>&(?:\d+|-)(?=\s|$|[|;&)])|\d*>\s*\/dev\/null(?=\s|$|[|;&)])/g, "");
   if (bare.includes(">")) return false;
+  // several lines, command substitution or process substitution hide a second command inside a part
+  if (/[\n`]|\$\(|<\(/.test(command)) return false;
   if (BASH_INPLACE.test(command) || BASH_CODE_WRITES.test(command)) return false;
   if (BASH_WRITES.some((re) => bare.match(re))) return false;
   const parts = command.split(/&&|\|\||;|\|/).map((p) => p.trim()).filter(Boolean);
