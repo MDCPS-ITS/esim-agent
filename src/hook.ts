@@ -210,10 +210,8 @@ function budget(input: Input): string | undefined {
     writeFileSync(file, JSON.stringify({ ...state, calls: state.calls + 1 }));
     return;
   }
-  const command = input.tool_input?.command;
-  if (state.okPassed && input.tool_name === "Bash" && typeof command === "string" && TEST_CMD.test(command)) {
-    return "An OK is done: its checks already passed in the worker's worktree, so don't re-run tests. Report the result, or delegate the next step.";
-  }
+  // running tests is never denied: after an OK Claude may still need to check the landed change with its own edits, a
+  // landed PARTIAL, or the files the user keeps in separate runs (the trust-OK denial blocked all of that)
 }
 
 /** Reads Claude Code's PostToolUse JSON for a esim-agent tool and records what its result means for this prompt. Never blocks. */
@@ -354,11 +352,15 @@ function patchCheck(cwd: string, patch: string, input: Input): string | undefine
 /** Plans live in .plan/ and are how Claude delegates, so the guard never blocks them. */
 const isPlan = (root: string, file: string) => file.startsWith(join(root, ".plan") + sep);
 
-/** Sonnet take-over: Bash is read-only when no part writes or runs tests, and every `&&`/`;`/`|` part starts with a reader. */
+/**
+ * Sonnet take-over: Bash is read-only when no part writes, and every `&&`/`;`/`|` part starts with a reader or runs
+ * tests (a test run checks the step, it does not take it over). Only stream merges and /dev/null redirects pass.
+ */
 function readOnly(command: string): boolean {
-  if (command.includes(">")) return false;
-  if (TEST_CMD.test(command) || BASH_INPLACE.test(command) || BASH_CODE_WRITES.test(command)) return false;
-  if (BASH_WRITES.some((re) => command.match(re))) return false;
+  const bare = command.replace(/\d?>&\d|\d?>\s*\/dev\/null\b/g, "");
+  if (bare.includes(">")) return false;
+  if (BASH_INPLACE.test(command) || BASH_CODE_WRITES.test(command)) return false;
+  if (BASH_WRITES.some((re) => bare.match(re))) return false;
   const parts = command.split(/&&|\|\||;|\|/).map((p) => p.trim()).filter(Boolean);
   return parts.length > 0 && parts.every(readPart);
 }
@@ -370,6 +372,7 @@ function readOnly(command: string): boolean {
 function readPart(part: string): boolean {
   const p = stripGitOptions(part.replace(/^(?:[A-Za-z_]\w*=\S*\s+)+/, "")).trim();
   if (p === "cd" || p.startsWith("cd ") || p.startsWith("export ")) return true;
+  if (TEST_CMD.test(p)) return true;
   return READ_PARTS.some((r) => p === r || p.startsWith(r + " "));
 }
 

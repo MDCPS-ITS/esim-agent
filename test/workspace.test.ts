@@ -182,6 +182,30 @@ test("an untracked symlink to a directory (a built .app's Frameworks) is carried
   expect(worktree).toBeTruthy();
 });
 
+test("a symlink the worker makes to a nested ignored venv is not part of the result, so the job lands", async () => {
+  const { repo, text } = await scenario({
+    prepare: (dir, git) => {
+      mkdirSync(join(dir, "app"), { recursive: true });
+      writeFileSync(join(dir, "app", ".gitignore"), ".venv/\n");
+      git("add", "app/.gitignore");
+      git("commit", "-q", "-m", "ignore the app's venv");
+      mkdirSync(join(dir, "app", ".venv", "bin"), { recursive: true });
+      writeFileSync(join(dir, "app", ".venv", "bin", "python"), "#!/bin/sh\n");
+    },
+    actions: (dir) => [
+      // link_dirs covers a top-level .venv only, so the worker links the nested one itself to run its checks
+      { hook: () => symlinkSync(join(dir, "app", ".venv"), join(worktreeOf(dir), "app", ".venv")) },
+      { edit: "src/out.txt", content: "out\n" },
+      { tool: "write" },
+      { finish: REPORT },
+    ],
+  });
+  expect(text.split("\n")[0]).toMatch(/^OK .* files=1 /);
+  expect(text).not.toContain(".venv");
+  expect(readFileSync(join(repo.dir, "src", "out.txt"), "utf8")).toBe("out\n");
+  expect(existsSync(join(repo.dir, "app", ".venv", "bin", "python"))).toBe(true); // the real venv is untouched
+});
+
 test("an untracked nested repository is left out of the worktree and does not break the job", async () => {
   const { text } = await scenario({
     prepare: (dir) => {

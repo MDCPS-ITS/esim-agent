@@ -248,7 +248,7 @@ test("takeover sonnet (default): after a FAIL, only the Agent tool, read-only to
   const reason = run("Edit", { file_path: "a.ts", old_string: "a", new_string: "b" });
   expect(reason).toMatch(/^The worker did not finish this step: hand it to your Agent tool with model: sonnet \(the task, the user's words, the block's found:, test=, error: and worktree\)/);
   expect(reason).toContain('takeover: "self"');
-  expect(run("Bash", { command: "./swebench-test.sh x" })).toMatch(/^The worker did not finish/);
+  expect(run("Bash", { command: "./swebench-test.sh x" })).toBeNull(); // a test run checks the step, it does not take it over
   expect(run("mcp__esim-agent__land", { job: "jab12" })).toBeNull();
   // reads and read-only Bash are how the reader inspects the diff before handing it over
   expect(run("Read", read)).toBeNull();
@@ -257,10 +257,12 @@ test("takeover sonnet (default): after a FAIL, only the Agent tool, read-only to
   expect(run("LS", { path: "." })).toBeNull();
   expect(run("Bash", { command: "git diff -- src/a.ts" })).toBeNull();
   expect(run("Bash", { command: "cat src/a.ts | head" })).toBeNull();
-  // writes and test runs stay denied
-  expect(run("Bash", { command: "npm test" })).toMatch(/^The worker did not finish/);
+  // test runs pass (stream merges and /dev/null too); writes stay denied
+  expect(run("Bash", { command: "npm test" })).toBeNull();
+  expect(run("Bash", { command: "cd pkg && .venv/bin/python -m pytest tests/x.py -q 2>&1 | tail -3" })).toBeNull();
+  expect(run("Bash", { command: "cat a && npm test > /dev/null" })).toBeNull();
   expect(run("Bash", { command: "echo x > f" })).toMatch(/^The worker did not finish/);
-  expect(run("Bash", { command: "cat a && npm test" })).toMatch(/^The worker did not finish/);
+  expect(run("Bash", { command: "npm test > out.log" })).toMatch(/^The worker did not finish/);
   // the hand-off clears the FAIL: once Claude calls the Agent, writing is its own business again
   expect(run("Agent", { model: "sonnet", prompt: "finish it" })).toBeNull();
   expect(run("Bash", { command: "echo x > f" })).toBeNull();
@@ -278,8 +280,8 @@ test("takeover sonnet: cd/env prefixes and git's -C/--no-pager/-c options stay r
   expect(run("Bash", { command: "git --no-pager log" })).toBeNull();
   expect(run("Bash", { command: "git -c core.pager=cat status" })).toBeNull();
   expect(run("Bash", { command: "X=1 git log" })).toBeNull();
-  // a write or a test still starts it, even behind cd
-  expect(run("Bash", { command: "cd /repo && npm test" })).toMatch(/^The worker did not finish/);
+  // a write still starts it, even behind cd; a test run does not
+  expect(run("Bash", { command: "cd /repo && npm test" })).toBeNull();
   expect(run("Bash", { command: "cd /repo && echo x > f" })).toMatch(/^The worker did not finish/);
   // edits resolve against the repo: inside is denied, outside is not
   expect(run("Write", { file_path: join(repo.dir, "inside.ts"), content: "x" })).toMatch(/^The worker did not finish/);
@@ -296,13 +298,13 @@ test("takeover: an env-kind FAIL leaves the guard off (nothing for the taker to 
   expect(run("Edit", { file_path: "a.ts", old_string: "a", new_string: "b" })).toBeNull();
 });
 
-test("trust OK: after an OK whose checks passed, re-running tests is denied; other tools pass; tests=none and a new prompt are free; a later FAIL wins", () => {
+test("after an OK, running tests is allowed whether or not its checks passed; a later FAIL still arms the take-over", () => {
   const { run, result } = setup();
   result("OK jab21 step=1 files=1 +1/-1 tests=none turns=4 cost=$0.002");
   expect(run("Bash", { command: "npm test" })).toBeNull(); // nothing ran in the worktree: Claude may test
   result("OK jab22 step=1 files=1 +1/-1 tests=pass turns=4 cost=$0.002 repro=unverified");
   for (const command of ["./swebench-test.sh migrations.test_commands", "python -m pytest tests/x.py", "npx vitest run a.test.ts", "cd pkg && go test ./..."]) {
-    expect(run("Bash", { command })).toBe("An OK is done: its checks already passed in the worker's worktree, so don't re-run tests. Report the result, or delegate the next step.");
+    expect(run("Bash", { command })).toBeNull();
   }
   expect(run("Bash", { command: "git status --short" })).toBeNull();
   expect(run("Read", read)).toBeNull();

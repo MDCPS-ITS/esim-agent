@@ -126,6 +126,38 @@ test("paths scope the search: the prompt names them, refs outside are dropped, a
   expect(fake.recorded.sessions).toHaveLength(1);
 });
 
+test("prose written above the block is the answer when the notes only sum it up, and refs relative to a scope folder resolve", async () => {
+  const { repo, fake, research } = await scenario();
+  mkdirSync(join(repo.dir, "My App", "pkg"), { recursive: true });
+  writeFileSync(join(repo.dir, "My App", "pkg", "a.ts"), AUTH);
+  fake.script({
+    text: [
+      "(a) The settings card is built in `pkg/a.ts` (line 3) and packed at App/pkg/a.ts:5.",
+      "(b) The busy flag lives beside it and is read by the shell before any write starts.",
+      "```esim-agent-research",
+      "status: answer",
+      "confidence: high",
+      // cited relative to the scope folder, and cut at the space in its name
+      "files: pkg/a.ts:3, App/pkg/a.ts:5",
+      "notes: Answered both parts with refs.",
+      "```",
+    ].join("\n"),
+  });
+  const text = await research({ question: "q", paths: "My App/pkg" });
+  expect(text).toContain("\nfiles: My App/pkg/a.ts:3, My App/pkg/a.ts:5\n");
+  expect(text).toContain("(a) The settings card is built in `pkg/a.ts` (line 3)");
+  expect(text).toContain("(b) The busy flag lives beside it");
+  expect(text).toContain("Answered both parts with refs.");
+});
+
+test("a short lead-in above the block is not added to the notes", async () => {
+  const { fake, research } = await scenario();
+  fake.script(block("status: answer\nconfidence: high\nfiles: src/auth.ts:1\nnotes: auth is checked in src/auth.ts before every request"));
+  const text = await research({ question: "q" });
+  expect(text).not.toContain("Found it.");
+  expect(text).toContain("auth is checked in src/auth.ts before every request");
+});
+
 test("a path that does not exist but whose basename is unique is resolved by basename with a note; several are ambiguous", async () => {
   const { repo, fake, research } = await scenario();
   mkdirSync(join(repo.dir, "a"));

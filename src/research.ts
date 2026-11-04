@@ -221,7 +221,10 @@ export function unlandedJobs(root: string): string[] {
  * UNSURE with low confidence (the worker never rated it). Nothing at all → undefined.
  */
 export function parseAnswer(text: string, root: string, scope: string[], maxWords: number): Answer | undefined {
-  const block = [...text.matchAll(/```esim-agent-research[^\n]*\n([\s\S]*?)```/g)].at(-1)?.[1];
+  const last = [...text.matchAll(/```esim-agent-research[^\n]*\n([\s\S]*?)```/g)].at(-1);
+  const block = last?.[1];
+  // models often write the real answer as prose above the block and leave notes: a one-line summary of it (r47k7)
+  const above = last ? text.slice(0, last.index).trim() : "";
   if (!block) return text.trim() ? { status: "UNSURE", answer: capWords(text.trim(), maxWords), refs: refs(text, root, scope), confidence: "low" } : undefined;
   const fields: Record<string, string> = {};
   let key: string | undefined;
@@ -231,7 +234,10 @@ export function parseAnswer(text: string, root: string, scope: string[], maxWord
     if (kv) fields[(key = ({ files: "refs", notes: "answer", "dead ends": "deadEnds", dead_ends: "deadEnds" } as Record<string, string>)[kv[1].toLowerCase()] ?? kv[1].toLowerCase())] = kv[2];
     else if (key === "answer") fields.answer += `\n${line}`; // the answer is prose: it may span lines
   }
-  const answer = (fields.answer ?? "").trim();
+  const notes = (fields.answer ?? "").trim();
+  // only when the prose is substantial and says more than the notes: a "Found it." lead-in is not the answer
+  const words = (t: string) => t.split(/\s+/).filter(Boolean).length;
+  const answer = above && words(above) >= 20 && words(above) > words(notes) && !notes.includes(above) ? [above, notes].filter(Boolean).join("\n\n") : notes;
   if (!answer) return undefined;
   const listed = refs(fields.refs ?? "", root, scope);
   const confidence = fields.confidence?.trim().toLowerCase().match(/^(high|medium|low)/)?.[1] as Answer["confidence"];
@@ -258,7 +264,8 @@ export function refTokens(text: string): { path: string; from: string; to: strin
  */
 function refs(text: string, root: string, scope: string[]): ResearchRecord["refs"] {
   const out: ResearchRecord["refs"] = [];
-  for (const { path, from, to } of refTokens(text)) {
+  for (const { path: token, from, to } of refTokens(text)) {
+    const path = isAbsolute(token) ? token : resolveRef(token, root, scope);
     const abs = isAbsolute(path) ? path : join(root, path);
     const rel = normalisePath(relative(root, abs));
     const start = Number(from);
@@ -278,6 +285,33 @@ function refs(text: string, root: string, scope: string[]): ResearchRecord["refs
     if (out.length === MAX_REFS) break;
   }
   return out;
+}
+
+/**
+ * Where a repo-relative ref token points. As written when that file exists; otherwise under a scope folder or one of its
+ * parents (the worker cites `intunepack/x.py` for scope `ESIM MDM Tools/intunepack`), also when the token lost the
+ * start of a folder name at a space (`Tools/x.py` for `ESIM MDM Tools`). Unresolved tokens come back unchanged.
+ */
+function resolveRef(token: string, root: string, scope: string[]): string {
+  const clean = token.replace(/\\/g, "/").replace(/^\.\//, "");
+  if (existsSync(join(root, clean))) return clean;
+  const [first, ...rest] = clean.split("/");
+  const prefixes = new Set<string>();
+  for (const s of scope) {
+    const parts = s.split("/").filter(Boolean);
+    for (let n = 1; n <= parts.length; n++) prefixes.add(parts.slice(0, n).join("/"));
+  }
+  for (const prefix of [...prefixes].sort((a, b) => b.length - a.length)) {
+    const joined = `${prefix}/${clean}`;
+    if (existsSync(join(root, joined)) && statSync(join(root, joined)).isFile()) return joined;
+    // the token began mid-name: "Tools/x.py" is the tail of "ESIM MDM Tools/x.py"
+    const name = prefix.split("/").at(-1)!;
+    if (rest.length && name !== first && name.endsWith(` ${first}`)) {
+      const cut = `${prefix}/${rest.join("/")}`;
+      if (existsSync(join(root, cut)) && statSync(join(root, cut)).isFile()) return cut;
+    }
+  }
+  return clean;
 }
 
 /** The text cut after `max` words, line breaks kept. */

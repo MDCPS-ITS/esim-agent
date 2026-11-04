@@ -116,6 +116,7 @@ export function worktreeDiff(worktree: Worktree) {
   // the worktree's own index: throwaway, never committed. A linked dir is a symlink, which a `node_modules/`
   // ignore rule does not match, so the linked ones (only those: a tracked vendor/ stays in) are excluded.
   git(path, ["add", "-A", "--", ".", ...outside(notIgnored(path, worktree.linked))]);
+  unstageDependencyLinks(path, base);
   const patch = git(path, ["diff", "--cached", "--binary", base]);
   const stats = git(path, ["diff", "--cached", "--numstat", "-z", "--no-renames", base]).split("\0").filter(Boolean);
   const statuses = new Map<string, string>();
@@ -127,6 +128,29 @@ export function worktreeDiff(worktree: Worktree) {
     return { status: statuses.get(file) ?? "M", path: file, add: Number(add) || 0, del: Number(del) || 0 };
   });
   return { patch, changed };
+}
+
+/**
+ * A symlink the worker made to reach a dependency dir its checks need (`ESIM MDM Tools/.venv -> <main>/.venv`, a nested
+ * venv `link_dirs` does not cover) is not a change: the main checkout ignores that path (`.venv/` matches its real
+ * directory, not the link), so landing it fails (`git add` refuses an ignored path) and would replace the directory.
+ * Added symlinks whose path the main checkout ignores are dropped from the worktree's throwaway index.
+ */
+function unstageDependencyLinks(path: string, base: string) {
+  const root = resolve(path, "..", "..", "..");
+  const names = git(path, ["diff", "--cached", "--name-status", "-z", "--no-renames", base]).split("\0").filter(Boolean);
+  const links: string[] = [];
+  for (let i = 0; i < names.length; i += 2) {
+    const file = names[i + 1];
+    if (names[i] !== "A" || !file) continue;
+    try {
+      if (!lstatSync(join(path, file)).isSymbolicLink()) continue;
+    } catch {
+      continue;
+    }
+    if (spawnSync("git", [...GIT_ARGS, "check-ignore", "-q", "--no-index", "--", file], { cwd: root, stdio: "pipe" }).status === 0) links.push(file);
+  }
+  if (links.length) git(path, ["rm", "--cached", "-q", "--", ...links.map(literal)]);
 }
 
 /** Why the checkout cannot be a job's starting point right now (a merge, rebase… or unresolved conflicts), if it cannot. */
