@@ -35,7 +35,6 @@ const MAX_QUIET_REJECTIONS = 5;
 /** Ticket 33: a harder step earns proportionally more turns before its cap (defaults 25/50/75 for easy/medium/hard). */
 const TURN_SCALE: Record<Difficulty, number> = { easy: 1, medium: 2, hard: 3 };
 /** The turn cap for the escalation attempt after a turn-cap stop: its own, smaller budget (ticket 33). */
-const ESC_TURNS = 15;
 /** Fail fast applies only to fixes (ticket 37): a step or source naming any of these is a bug to reproduce first. */
 const FIX_WORDS = /\b(bug|fix(?:es|ed|ing)?|fail(?:s|ed|ing|ure)?|error|crash(?:es|ed)?|regress(?:ion|ed)?|broken|incorrect|wrong|traceback|exception)\b/i;
 
@@ -243,7 +242,8 @@ function runGroup(g: GroupRun) {
   const scale = TURN_SCALE[difficulty ?? "easy"];
   let turnCap = limits.max_turns * scale;
   let turnBase = 0; // turns already spent when the current turn budget began (reset for the escalation attempt)
-  const escCap = Math.min(limits.max_turns, ESC_TURNS);
+  // the stronger model's own turn budget after a turn-cap stop: limits.max_escalation_turns (default 15), never above max_turns
+  const escCap = Math.min(limits.max_turns, limits.max_escalation_turns);
   const halt = new AbortController(); // the worker session
   const kill = new AbortController(); // verify processes: a turn cap still runs one last check, so PARTIAL never hides failing tests
   let escTurn: AbortController | undefined; // the escalation attempt's own run, when it follows a turn-cap stop
