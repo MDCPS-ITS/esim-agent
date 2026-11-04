@@ -264,7 +264,7 @@ test("takeover sonnet (default): after a FAIL, only the Agent tool, read-only to
   expect(run("Bash", { command: "echo x > f" })).toMatch(/^The worker did not finish/);
   expect(run("Bash", { command: "npm test > out.log" })).toMatch(/^The worker did not finish/);
   // only a part that is a test run passes: a write that mentions a runner, or a redirect that only looks like /dev/null, does not
-  for (const command of ["rm -rf src # pytest", "cp a.ts src/b.ts && echo pytest", "npm test >/dev/null.txt", "npm test 2>&1x", "sed -i s/a/b/ a.ts; npm test", "npm test\nrm -rf src", "pytest $(rm -rf src)", "pytest `rm x`"]) {
+  for (const command of ["rm -rf src # pytest", "cp a.ts src/b.ts && echo pytest", "npm test >/dev/null.txt", "npm test 2>&1x", "sed -i s/a/b/ a.ts; npm test", "npm test\nrm -rf src", "pytest $(rm -rf src)", "pytest `rm x`", "npm test & rm -rf src", "cat a & echo x > f"]) {
     expect(run("Bash", { command })).toMatch(/^The worker did not finish/);
   }
   // the hand-off clears the FAIL: once Claude calls the Agent, writing is its own business again

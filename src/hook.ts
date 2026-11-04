@@ -365,6 +365,8 @@ function readOnly(command: string): boolean {
   if (bare.includes(">")) return false;
   // several lines, command substitution or process substitution hide a second command inside a part
   if (/[\n`]|\$\(|<\(/.test(command)) return false;
+  // a lone `&` (background) starts a second command the part splitter does not see
+  if (bare.replace(/&&/g, "").includes("&")) return false;
   if (BASH_INPLACE.test(command) || BASH_CODE_WRITES.test(command)) return false;
   if (BASH_WRITES.some((re) => bare.match(re))) return false;
   const parts = command.split(/&&|\|\||;|\|/).map((p) => p.trim()).filter(Boolean);
