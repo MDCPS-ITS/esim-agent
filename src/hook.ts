@@ -26,6 +26,9 @@ const OK_PASSED = /^OK j\w+ step=\S+ .*\btests=pass\b/m;
 // shortcut: the usual runners only; add the repo's test_cmd if Claude re-runs tests through a custom script
 const TEST_CMD = /swebench-test\.sh|\bpytest\b|runtests\.py|bin\/test\b|\b(?:npm|pnpm|yarn|bun) (?:run )?test\b|node --test|\btox\b|\bvitest\b|\bjest\b|\bgo test\b|\bcargo test\b|\b(?:mvn|gradle|gradlew) test\b|\brspec\b|\bphpunit\b|-m unittest\b|\bmake test\b/;
 // sonnet take-over: reads are how the subagent (or Claude) inspects the worker's diff before handing it over
+// a part that is a test run from its first word (after env prefixes and cd are dropped): a path to a venv's python or a
+// runner, then the test command; anything after it in the same part is its arguments. `rm x # pytest` is not one.
+const TEST_RUN = /^(?:\S*\/)?(?:pytest|py\.test|vitest|jest|tox|rspec|phpunit|swebench-test\.sh|runtests\.py|test)(?:\s|$)|^(?:\S*\/)?python[\d.]*\s+(?:-\S+\s+)*-m\s+(?:pytest|unittest)(?:\s|$)|^(?:npx|bunx)\s+(?:vitest|jest)(?:\s|$)|^(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test(?:\s|$)|^node\s+--test(?:\s|$)|^(?:go|cargo)\s+test(?:\s|$)|^(?:\.\/)?(?:mvn|gradle|gradlew)\s+test(?:\s|$)|^make\s+test(?:\s|$)/;
 const READ_TOOLS = new Set(["Read", "Grep", "Glob", "LS"]);
 // edits outside the repo cannot touch the worker's worktree, so the taker may make them (the Sonnet branch only)
 const OUTSIDE_EDITS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
@@ -357,7 +360,8 @@ const isPlan = (root: string, file: string) => file.startsWith(join(root, ".plan
  * tests (a test run checks the step, it does not take it over). Only stream merges and /dev/null redirects pass.
  */
 function readOnly(command: string): boolean {
-  const bare = command.replace(/\d?>&\d|\d?>\s*\/dev\/null\b/g, "");
+  // whole tokens only: `2>&1`, `>&-`, `> /dev/null`, never `>/dev/null.txt` or `>&1x`
+  const bare = command.replace(/\d*>&(?:\d+|-)(?=\s|$|[|;&)])|\d*>\s*\/dev\/null(?=\s|$|[|;&)])/g, "");
   if (bare.includes(">")) return false;
   if (BASH_INPLACE.test(command) || BASH_CODE_WRITES.test(command)) return false;
   if (BASH_WRITES.some((re) => bare.match(re))) return false;
@@ -372,7 +376,7 @@ function readOnly(command: string): boolean {
 function readPart(part: string): boolean {
   const p = stripGitOptions(part.replace(/^(?:[A-Za-z_]\w*=\S*\s+)+/, "")).trim();
   if (p === "cd" || p.startsWith("cd ") || p.startsWith("export ")) return true;
-  if (TEST_CMD.test(p)) return true;
+  if (TEST_RUN.test(p)) return true;
   return READ_PARTS.some((r) => p === r || p.startsWith(r + " "));
 }
 
