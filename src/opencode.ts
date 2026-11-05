@@ -137,6 +137,30 @@ const COMMAND_CODE = {
   options: { baseURL: "https://api.commandcode.ai/provider/v1" },
 };
 
+/**
+ * Gauge, the M-DCPS AI gateway (https://gauge.dadeschools.net): OpenCode's Vertex AI provider pointed at the gateway,
+ * which checks the person's Gauge key (sent as x-goog-api-key, from OpenCode's auth store like every other key),
+ * applies their monthly limit, and forwards to Vertex AI in mdcps-ai-gateway. Not in OpenCode's catalog under this id,
+ * so every model is declared, with its list price (per million tokens, OpenCode 1.19.0's google-vertex catalog,
+ * 2026-11-05) so the per-job cost cap (limits.max_cost_usd) sees real spend. Pro costs more over 200k prompt tokens
+ * than listed here; Gauge's own records use the higher rate.
+ */
+const GAUGE_BASE_URL = "https://gauge.dadeschools.net/vertex/v1/projects/mdcps-ai-gateway/locations/global/publishers/google";
+const GAUGE_PRICES: Record<string, { input: number; output: number; cache_read: number }> = {
+  "gemini-3.8-flash": { input: 0.75, output: 3.75, cache_read: 0.075 },
+  "gemini-3.7-flash": { input: 0.75, output: 3.75, cache_read: 0.075 },
+  "gemini-2.5-flash": { input: 0.3, output: 2.5, cache_read: 0.03 },
+  "gemini-3.5-flash-lite": { input: 0.3, output: 2.5, cache_read: 0.03 },
+  "gemini-3.1-pro-preview": { input: 2, output: 12, cache_read: 0.2 },
+};
+// a model set in esim-agent.json that is not listed above: priced as Pro, so the cost cap errs on the safe side
+const GAUGE_UNLISTED = { input: 2, output: 12, cache_read: 0.2 };
+const GAUGE = {
+  npm: "@ai-sdk/google-vertex",
+  name: "Gauge (M-DCPS AI gateway)",
+  options: { baseURL: GAUGE_BASE_URL },
+};
+
 /** The generated opencode.json for the route's models: their options (e.g. OpenRouter routing) and the small model. */
 function opencodeConfig(provider: Provider, route: Route) {
   // the key itself stays in OpenCode's own credential store; the config never names one
@@ -146,6 +170,13 @@ function opencodeConfig(provider: Provider, route: Route) {
   if (provider.provider === "commandcode") {
     Object.assign(providerConfig, COMMAND_CODE, {
       models: Object.fromEntries(routeModels(route).map((m) => [m.id, { name: m.id, ...(models[m.id] ?? {}) }])),
+    });
+  }
+  if (provider.provider === "gauge") {
+    Object.assign(providerConfig, GAUGE, {
+      models: Object.fromEntries(
+        routeModels(route).map((m) => [m.id, { name: m.id, cost: GAUGE_PRICES[m.id] ?? GAUGE_UNLISTED, limit: { context: 1048576, output: 65536 }, ...(models[m.id] ?? {}) }]),
+      ),
     });
   }
   const config = {

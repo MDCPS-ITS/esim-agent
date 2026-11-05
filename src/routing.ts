@@ -34,6 +34,13 @@ export const ROLES: Record<ProviderId, { implement: string[]; research: string[]
   deepseek: { implement: ["deepseek-flash"], research: ["deepseek-flash"], escalation: "deepseek-v4-pro" },
   // Command Code's Provider API (OpenAI-compatible); ids from api.commandcode.ai/provider/v1/models (checked 2026-10-31)
   commandcode: { implement: ["deepseek/deepseek-v4.1-flash"], research: ["deepseek/deepseek-v4.1-flash"], escalation: "deepseek/deepseek-v4-pro" },
+  // Gauge, the M-DCPS AI gateway: the same Gemini models on Vertex AI in the district's project (mdcps-ai-gateway),
+  // billed to the district with per-person limits; declared in src/opencode.ts (ids from OpenCode 1.19.0's google-vertex catalog)
+  gauge: {
+    implement: ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-2.5-flash"],
+    research: ["gemini-3.5-flash-lite", "gemini-3.8-flash"],
+    escalation: "gemini-3.1-pro-preview",
+  },
   // Google's Gemini API (built into OpenCode as "google"); ids and prices from OpenCode 1.19.0's catalog (checked 2026-11-02)
   google: {
     implement: ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-2.5-flash"],
@@ -70,6 +77,12 @@ export const PRESETS: Record<ProviderId, Record<Preset, ModelsConfig>> = {
     cheapest: { implement: "commandcode/deepseek/deepseek-v4.1-flash" },
     balanced: { implement: "commandcode/deepseek/deepseek-v4.1-flash" },
     strongest: { implement: "commandcode/deepseek/deepseek-v4-pro" },
+  },
+  // Gauge: the Gemini presets below, through the district gateway
+  gauge: {
+    cheapest: { implement: "gauge/gemini-3.5-flash-lite" },
+    balanced: { implement: "gauge/gemini-3.8-flash" },
+    strongest: { implement: "gauge/gemini-3.1-pro-preview", medium: "gauge/gemini-3.1-pro-preview" },
   },
   // Gemini: cheapest on 3.5 Flash-Lite ($0.30/$2.50 per M), balanced on 3.8 Flash ($0.75/$3.75), strongest on 3.1 Pro ($2/$12)
   google: {

@@ -27,6 +27,15 @@ Run setup. Pick **5) Google Gemini**, press Enter for **balanced**, then type yo
 node dist/index.js
 ```
 
+### District setup: Gauge (recommended for M-DCPS work)
+
+Instead of a personal Gemini key, the worker can go through **Gauge**, the district AI gateway. It runs the same Gemini models on Vertex AI in the district's own Google Cloud project, so the cost lands on the district's budget, your usage is recorded per person, and your monthly limit is applied there. Requirements: you're in the Gauge-AI-Users group, and you're on the district network.
+
+1. Create a key at [gauge.dadeschools.net](https://gauge.dadeschools.net) → **My AI access**. It's shown once.
+2. Run `node dist/index.js`, pick **6) Gauge**, press Enter for **balanced**, and paste the key.
+
+Once a Gauge key is saved, the worker always uses it first, even if other providers are logged in too. If Gauge refuses a request (limit reached, key expired, access suspended), the job fails with Gauge's message; sign in to Gauge every 30 days to keep the key working.
+
 ## Use it
 
 1. Open Claude Code in a project. It has to be a git repo **outside** iCloud/OneDrive, and the session must start in the repo's own folder.

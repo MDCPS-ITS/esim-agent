@@ -311,3 +311,24 @@ test("redact strips Google API keys", () => {
   const key = "AIza" + "SyD0123456789abcdefghijklmnopqrstu";
   expect(redact(`bad key ${key} rejected`)).toBe("bad key [redacted] rejected");
 });
+
+// ---- gauge (M-DCPS AI gateway: Gemini on Vertex AI) presets and role defaults ----
+
+test("gauge presets mirror Gemini's, through the district gateway; roles default 3.8 Flash with 3.1 Pro escalation", () => {
+  const implement = (models: ModelsConfig) => modelName(fullRoute("gauge", models).implement);
+  expect(implement(PRESETS.gauge.cheapest)).toBe("gauge/gemini-3.5-flash-lite");
+  expect(implement(PRESETS.gauge.balanced)).toBe("gauge/gemini-3.8-flash");
+  expect(implement(PRESETS.gauge.strongest)).toBe("gauge/gemini-3.1-pro-preview");
+  expect(presetOf("gauge", {})).toBe("balanced");
+  const route = fullRoute("gauge");
+  expect(route.fallbacks.map(modelName)).toEqual(["gauge/gemini-3.7-flash", "gauge/gemini-2.5-flash"]);
+  expect(modelName(route.research!)).toBe("gauge/gemini-3.5-flash-lite");
+  expect(modelName(route.escalation!)).toBe("gauge/gemini-3.1-pro-preview");
+  // a google/ model in esim-agent.json is ignored on gauge: nothing bypasses the gateway
+  expect(implement({ implement: "google/gemini-3.5-flash-lite" })).toBe("gauge/gemini-3.8-flash");
+});
+
+test("redact strips Gauge keys", () => {
+  const key = "gauge_" + "Ab3".repeat(14) + "x";
+  expect(redact(`key ${key} rejected`)).toBe("key [redacted] rejected");
+});
