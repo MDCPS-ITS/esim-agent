@@ -159,6 +159,37 @@ test("a Command Code key never reaches output or config; the config declares the
   });
 });
 
+test("a Gauge key never reaches output or config; the config points OpenCode's Vertex AI provider at the district gateway with priced models", async () => {
+  const key = "gauge_" + "SECRET0123456789abcdefghijklmnopqrstuvwxyz0";
+  const server = await startServer({ env: { ESIM_AGENT_OPENCODE_URL: await fakeHealth(key) }, logins: { gauge: key, google: "AIza" + "x".repeat(35) } });
+  onTestFinished(server.close);
+  const text = await callText(server.client, "ping");
+  expect(text).toBe("FAIL reason: opencode version [redacted], expected 1.19.0; reinstall esim-agent");
+  const config = readFileSync(join(server.home, ".esim-agent", "opencode", "opencode.json"), "utf8");
+  expect(config).not.toContain(key);
+  expect(config).not.toContain("apiKey");
+  const price = (input: number, output: number, cache_read: number) => ({ cost: { input, output, cache_read }, limit: { context: 1048576, output: 65536 } });
+  // Gauge is detected before Google: with both saved, the worker goes through the gateway
+  expect(JSON.parse(config)).toEqual({
+    $schema: "https://opencode.ai/config.json",
+    small_model: "gauge/gemini-3.8-flash",
+    provider: {
+      gauge: {
+        npm: "@ai-sdk/google-vertex",
+        name: "Gauge (M-DCPS AI gateway)",
+        options: { baseURL: "https://gauge.dadeschools.net/vertex/v1/projects/mdcps-ai-gateway/locations/global/publishers/google" },
+        models: {
+          "gemini-3.8-flash": { name: "gemini-3.8-flash", ...price(0.75, 3.75, 0.075) },
+          "gemini-3.7-flash": { name: "gemini-3.7-flash", ...price(0.75, 3.75, 0.075) },
+          "gemini-2.5-flash": { name: "gemini-2.5-flash", ...price(0.3, 2.5, 0.03) },
+          "gemini-3.1-pro-preview": { name: "gemini-3.1-pro-preview", ...price(2, 12, 0.2) },
+          "gemini-3.5-flash-lite": { name: "gemini-3.5-flash-lite", ...price(0.3, 2.5, 0.03) },
+        },
+      },
+    },
+  });
+});
+
 test("boots the bundled OpenCode lazily on localhost, restarts it after a crash, and kills its process group on exit", async () => {
   // PATH without Homebrew & co: only the bundled binary can be found
   const PATH = [dirname(process.execPath), "/usr/bin", "/bin"].join(":");
